@@ -39,6 +39,9 @@ public with sharing class RecordGraphSync {
         Savepoint sp = Database.setSavepoint();
         Map<String, Id> aliasToId = new Map<String, Id>();
         try {
+            // TODO bulkify: this issues one DML per node and will hit the 150
+            // DML-statements limit on large graphs. Process level-by-level and run
+            // one DML per (object, op) group once parent Ids for the level are known.
             for (GraphNode node : ordered) {
                 applyNode(node, aliasToId, result);
             }
@@ -47,7 +50,9 @@ public with sharing class RecordGraphSync {
         } catch (Exception e) {
             Database.rollback(sp);
             result.success = false;
+            // Everything is undone — don't report rolled-back nodes as persisted.
             result.aliasToId = new Map<String, Id>();
+            result.nodeResults.clear();
             result.message = 'Rolled back: ' + e.getMessage();
         }
         return result;
@@ -77,7 +82,9 @@ public with sharing class RecordGraphSync {
             }
             Database.update(record, true);
         } else if (op == 'upsert') {
-            Database.upsert(record, true);
+            // Id-based upsert; single-record upsert throws on failure, which the
+            // surrounding savepoint/try-catch turns into a rollback.
+            Database.upsert(record);
         } else {
             throw new GraphException('unknown op "' + node.op + '" on node "' + node.alias + '"');
         }

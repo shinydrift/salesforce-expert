@@ -62,7 +62,8 @@ public with sharing class CreateQuoteFromTemplate {
 
             RecordGraphResult result = new RecordGraphSync().sync(graph);
             resp.success = result.success;
-            resp.quoteId = (result.aliasToId != null) ? String.valueOf(result.aliasToId.get('quote')) : null;
+            Id quoteId = result.aliasToId.get('quote');
+            resp.quoteId = (quoteId == null) ? null : String.valueOf(quoteId);
             resp.message = result.message;
         } catch (Exception e) {
             resp.success = false;
