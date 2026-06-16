@@ -35,7 +35,7 @@ nodes:
     parentAlias: quote
     parentField: QuoteId
     fields:
-      Product2Id: "SKU-CORE"        # resolved to PricebookEntryId by the engine
+      ProductCode: "GC104"          # GenWatt Diesel 200kW — resolved to PricebookEntryId
       Quantity: "${quantity|1}"
 
   - alias: line_support
@@ -44,5 +44,5 @@ nodes:
     parentAlias: quote
     parentField: QuoteId
     fields:
-      Product2Id: "SKU-SUPPORT"
+      ProductCode: "SL9040"         # SLA: Silver — resolved to PricebookEntryId
       Quantity: 1

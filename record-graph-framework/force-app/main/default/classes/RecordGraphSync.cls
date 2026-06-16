@@ -18,6 +18,20 @@ public with sharing class RecordGraphSync {
 
     public class GraphException extends Exception {}
 
+    // --- domain reference-resolution configuration ----------------------------
+    // The engine itself is object-agnostic. The ONE place it knows about a specific
+    // domain is here: the pricebook/ProductCode convention used by Opportunity and
+    // Quote line items. To support another priced object (or a different business-key
+    // reference), extend this config rather than editing resolveReferences() inline —
+    // add the host object to PRICEBOOK_HOST_OBJECTS. A future generalisation would
+    // make this a pluggable ReferenceResolver interface; until a second convention
+    // exists, a single declared config block keeps the seam visible and contained.
+
+    /** Objects whose line items are priced from a Pricebook2 (host carries Pricebook2Id). */
+    @TestVisible
+    private static final Set<String> PRICEBOOK_HOST_OBJECTS =
+        new Set<String>{ 'Opportunity', 'Quote' };
+
     /** Synthetic field the engine resolves to PricebookEntryId then strips before DML. */
     @TestVisible
     private static final String PRODUCT_CODE_FIELD = 'ProductCode';
@@ -164,7 +178,10 @@ public with sharing class RecordGraphSync {
 
         Boolean needsStandardPricebook = false;
         for (GraphNode n : req.nodes) {
-            if (isPricebookHost(n.objectApiName) && !n.fields.containsKey('Pricebook2Id')) {
+            // n.fields may be null (a host node with no explicit fields) — guard like
+            // the ProductCode collection above and treat it as lacking a pricebook.
+            if (isPricebookHost(n.objectApiName)
+                && (n.fields == null || !n.fields.containsKey('Pricebook2Id'))) {
                 needsStandardPricebook = true;
             }
         }
@@ -176,7 +193,11 @@ public with sharing class RecordGraphSync {
 
         // 2. Default the pricebook on every host node that lacks one.
         for (GraphNode n : req.nodes) {
-            if (isPricebookHost(n.objectApiName) && !n.fields.containsKey('Pricebook2Id')) {
+            if (isPricebookHost(n.objectApiName)
+                && (n.fields == null || !n.fields.containsKey('Pricebook2Id'))) {
+                if (n.fields == null) {
+                    n.fields = new Map<String, Object>();
+                }
                 n.fields.put('Pricebook2Id', standardPricebookId);
             }
         }
@@ -238,7 +259,7 @@ public with sharing class RecordGraphSync {
     }
 
     private Boolean isPricebookHost(String objectApiName) {
-        return objectApiName == 'Opportunity' || objectApiName == 'Quote';
+        return PRICEBOOK_HOST_OBJECTS.contains(objectApiName);
     }
 
     private Id standardPricebookId() {
@@ -369,11 +390,13 @@ public with sharing class RecordGraphSync {
         // Optimistic locking on updates.
         enforceOptimisticLocks(req.nodes);
 
-        // Group requested children under existing parents by (parentId, object, fk).
+        // Group requested children by (object, fk) so each child collection is
+        // reconciled with ONE bulk query (per object/FK) rather than one per parent.
         Map<String, Schema.SObjectType> groupType = new Map<String, Schema.SObjectType>();
-        Map<String, Id> groupParentId = new Map<String, Id>();
         Map<String, String> groupFk = new Map<String, String>();
-        Map<String, Set<Id>> requestedChildIds = new Map<String, Set<Id>>();
+        Map<String, Set<Id>> groupParentIds = new Map<String, Set<Id>>();
+        // Per (object, fk, parentId): the child Ids the request wants to keep.
+        Map<String, Set<Id>> keepByParent = new Map<String, Set<Id>>();
 
         for (GraphNode n : req.nodes) {
             if (String.isBlank(n.parentAlias)) {
@@ -383,32 +406,51 @@ public with sharing class RecordGraphSync {
             if (parent == null || String.isBlank(parent.recordId)) {
                 continue; // only reconcile children of *existing* parents
             }
-            String key = parent.recordId + '|' + n.objectApiName + '|' + n.parentField;
-            groupType.put(key, describes.sObjectType(n.objectApiName));
-            groupParentId.put(key, (Id) parent.recordId);
-            groupFk.put(key, n.parentField);
-            if (!requestedChildIds.containsKey(key)) {
-                requestedChildIds.put(key, new Set<Id>());
+            Id parentId = (Id) parent.recordId;
+            String groupKey = n.objectApiName + '|' + n.parentField;
+            groupType.put(groupKey, describes.sObjectType(n.objectApiName));
+            groupFk.put(groupKey, n.parentField);
+            if (!groupParentIds.containsKey(groupKey)) {
+                groupParentIds.put(groupKey, new Set<Id>());
+            }
+            groupParentIds.get(groupKey).add(parentId);
+
+            String parentKey = groupKey + '|' + parentId;
+            if (!keepByParent.containsKey(parentKey)) {
+                keepByParent.put(parentKey, new Set<Id>());
             }
             if (String.isNotBlank(n.recordId)) {
-                requestedChildIds.get(key).add((Id) n.recordId);
+                keepByParent.get(parentKey).add((Id) n.recordId);
             }
         }
 
-        // For each group, anything in the DB but not in the request is an orphan -> delete.
-        for (String key : groupType.keySet()) {
-            String objName = groupType.get(key).getDescribe().getName();
-            String fk = groupFk.get(key);
-            Id parentId = groupParentId.get(key);
-            Set<Id> keep = requestedChildIds.get(key);
-            String soql = 'SELECT Id FROM ' + objName + ' WHERE ' + fk + ' = :parentId';
+        // One bulk query per (object, fk): anything under a reconciled parent that the
+        // request doesn't name is an orphan -> delete.
+        for (String groupKey : groupType.keySet()) {
+            String objName = groupType.get(groupKey).getDescribe().getName();
+            // Validate the FK against describe BEFORE interpolating it into SOQL — it
+            // is caller-supplied (node.parentField) and must never be concatenated raw.
+            Schema.SObjectField fkToken =
+                describes.fieldMap(objName).get(groupFk.get(groupKey).toLowerCase());
+            if (fkToken == null) {
+                throw new GraphException(
+                    'parentField "' + groupFk.get(groupKey) + '" is not a field on ' + objName
+                );
+            }
+            String fkName = fkToken.getDescribe().getName();
+            Set<Id> parentIds = groupParentIds.get(groupKey);
+            String soql = 'SELECT Id, ' + fkName + ' FROM ' + objName +
+                          ' WHERE ' + fkName + ' IN :parentIds';
             for (SObject existing : Database.query(soql)) {
-                if (!keep.contains((Id) existing.get('Id'))) {
+                Id childId = (Id) existing.get('Id');
+                Id parentId = (Id) existing.get(fkName);
+                Set<Id> keep = keepByParent.get(groupKey + '|' + parentId);
+                if (keep == null || !keep.contains(childId)) {
                     GraphNode del = new GraphNode();
-                    del.alias = '_orphan_' + existing.get('Id');
+                    del.alias = '_orphan_' + childId;
                     del.objectApiName = objName;
                     del.op = 'delete';
-                    del.recordId = String.valueOf(existing.get('Id'));
+                    del.recordId = String.valueOf(childId);
                     out.add(del);
                 }
             }
@@ -438,7 +480,12 @@ public with sharing class RecordGraphSync {
                 'SELECT Id, LastModifiedDate FROM ' + objName + ' WHERE Id IN :ids')) {
                 GraphNode n = guarded.get((Id) row.get('Id'));
                 Datetime live = (Datetime) row.get('LastModifiedDate');
-                if (live != Datetime.valueOf(n.expectedLastModified.replace('T', ' ').replace('Z', ''))) {
+                // Compare at second precision in GMT. The client round-trips an ISO
+                // string (e.g. '2026-06-16T10:30:45.123Z'); the live value carries
+                // sub-second millis. Exact Datetime equality would falsely reject every
+                // valid update (and parsing the '.123' fraction would throw), so both
+                // sides are normalised to a canonical 'yyyy-MM-ddTHH:mm:ss' GMT key.
+                if (secondKey(live) != secondKey(parseExpected(n.expectedLastModified))) {
                     throw new GraphException(
                         'optimistic lock failed for node "' + n.alias +
                         '": record ' + row.get('Id') + ' was modified concurrently'
@@ -446,6 +493,28 @@ public with sharing class RecordGraphSync {
                 }
             }
         }
+    }
+
+    /** Second-precision GMT key for optimistic-lock comparison. */
+    private String secondKey(Datetime dt) {
+        return dt.formatGmt('yyyy-MM-dd\'T\'HH:mm:ss');
+    }
+
+    /**
+     * Parse a client-supplied LastModifiedDate. Accepts ISO-8601 with optional
+     * sub-second fraction and trailing 'Z' (GMT) — '2026-06-16T10:30:45.123Z',
+     * '2026-06-16T10:30:45Z', or a plain '2026-06-16 10:30:45'. Sub-seconds are
+     * stripped (we compare at second precision) and the value is read as GMT, which
+     * is how a serialized Salesforce Datetime presents the 'Z'.
+     */
+    @TestVisible
+    private Datetime parseExpected(String iso) {
+        String s = iso.trim().replace('T', ' ').replace('Z', '').trim();
+        Integer dot = s.indexOf('.');
+        if (dot != -1) {
+            s = s.substring(0, dot);
+        }
+        return Datetime.valueOfGmt(s);
     }
 
     // --- coercion: describe-driven type mapping --------------------------------

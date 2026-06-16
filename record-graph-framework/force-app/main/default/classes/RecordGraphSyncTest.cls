@@ -220,4 +220,32 @@ private class RecordGraphSyncTest {
         System.assertEquals('Acme', [SELECT Name FROM Account WHERE Id = :a.Id].Name,
             'record left unchanged');
     }
+
+    @IsTest
+    static void optimisticLock_allowsCurrentLastModified() {
+        // Happy path: the client passes back the record's *current* LastModifiedDate,
+        // including sub-second millis (exactly how a serialized SF Datetime looks). The
+        // lock must accept this and let the update through — the bug this guards against
+        // was an exact-equality compare that falsely rejected every non-stale update.
+        Account a = new Account(Name = 'Acme');
+        insert a;
+        Datetime lm = [SELECT LastModifiedDate FROM Account WHERE Id = :a.Id].LastModifiedDate;
+        // ISO-8601 with millis + 'Z', the value a client would round-trip unchanged.
+        String isoWithMillis = lm.formatGmt('yyyy-MM-dd\'T\'HH:mm:ss.SSS\'Z\'');
+
+        RecordGraphRequest req = new RecordGraphRequest();
+        GraphNode n = node('acct', 'Account', 'update', null, null,
+            new Map<String, Object>{ 'Name' => 'Renamed' });
+        n.recordId = a.Id;
+        n.expectedLastModified = isoWithMillis;
+        req.nodes.add(n);
+
+        Test.startTest();
+        RecordGraphResult result = new RecordGraphSync().sync(req);
+        Test.stopTest();
+
+        System.assert(result.success, 'current LastModifiedDate should pass the lock: ' + result.message);
+        System.assertEquals('Renamed', [SELECT Name FROM Account WHERE Id = :a.Id].Name,
+            'update should have been applied');
+    }
 }
