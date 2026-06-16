@@ -4,3 +4,6 @@
 .localdevserver/
 *.log
 .DS_Store
+
+# Tooling
+node_modules/

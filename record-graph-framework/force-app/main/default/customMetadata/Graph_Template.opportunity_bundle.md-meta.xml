@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomMetadata xmlns="http://soap.sforce.com/2006/04/metadata" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    <label>Opportunity Bundle</label>
+    <protected>false</protected>
+    <values>
+        <field>Graph_Json__c</field>
+        <value xsi:type="xsd:string">{"id":"opportunity-bundle","label":"Opportunity Bundle","description":"An Opportunity with a generator line and an SLA line, priced from the standard pricebook.","parameters":[{"name":"name","type":"string","required":true},{"name":"closeDate","type":"string","required":true},{"name":"quantity","type":"number","required":false,"default":1}],"nodes":[{"alias":"opp","objectApiName":"Opportunity","op":"create","fields":{"Name":"${name}","StageName":"Prospecting","CloseDate":"${closeDate}"}},{"alias":"line_generator","objectApiName":"OpportunityLineItem","op":"create","parentAlias":"opp","parentField":"OpportunityId","fields":{"ProductCode":"GC104","Quantity":"${quantity|1}"}},{"alias":"line_sla","objectApiName":"OpportunityLineItem","op":"create","parentAlias":"opp","parentField":"OpportunityId","fields":{"ProductCode":"SL9040","Quantity":1}}]}</value>
+    </values>
+</CustomMetadata>

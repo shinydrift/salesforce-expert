@@ -22,8 +22,22 @@ public class RecordGraphRequest {
         this.nodes = new List<GraphNode>();
     }
 
-    /** Deserialize from the JSON wire format. */
-    public static RecordGraphRequest fromJson(String json) {
-        return (RecordGraphRequest) JSON.deserialize(json, RecordGraphRequest.class);
+    /**
+     * Deserialize from the JSON wire format. Parsed untyped because GraphNode.fields
+     * is a Map<String, Object>, which JSON.deserialize into a typed graph cannot
+     * target ("Apex Type unsupported in JSON: Object").
+     */
+    public static RecordGraphRequest fromJson(String jsonStr) {
+        Map<String, Object> m = (Map<String, Object>) JSON.deserializeUntyped(jsonStr);
+        RecordGraphRequest req = new RecordGraphRequest();
+        req.clientRequestId = (String) m.get('clientRequestId');
+        req.source = (String) m.get('source');
+        req.templateId = (String) m.get('templateId');
+        if (m.get('nodes') != null) {
+            for (Object o : (List<Object>) m.get('nodes')) {
+                req.nodes.add(GraphNode.fromMap((Map<String, Object>) o));
+            }
+        }
+        return req;
     }
 }

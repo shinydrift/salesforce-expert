@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomMetadata xmlns="http://soap.sforce.com/2006/04/metadata" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    <label>Starter Bundle</label>
+    <protected>false</protected>
+    <values>
+        <field>Graph_Json__c</field>
+        <value xsi:type="xsd:string">{"id":"starter-bundle","label":"Starter Bundle","description":"Core product plus standard support, single quote.","parameters":[{"name":"opportunityId","type":"string","required":true},{"name":"quantity","type":"number","required":false,"default":1}],"nodes":[{"alias":"quote","objectApiName":"Quote","op":"create","fields":{"Name":"Starter Bundle","OpportunityId":"${opportunityId}","Status":"Draft"}},{"alias":"line_core","objectApiName":"QuoteLineItem","op":"create","parentAlias":"quote","parentField":"QuoteId","fields":{"Product2Id":"SKU-CORE","Quantity":"${quantity|1}"}},{"alias":"line_support","objectApiName":"QuoteLineItem","op":"create","parentAlias":"quote","parentField":"QuoteId","fields":{"Product2Id":"SKU-SUPPORT","Quantity":1}}]}</value>
+    </values>
+</CustomMetadata>
