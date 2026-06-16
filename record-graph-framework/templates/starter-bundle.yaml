@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=../schema/quote-graph.schema.json
+#
+# Starter Bundle — a single Quote with two fixed lines.
+# The agent only supplies the `parameters`; everything else is fixed here, so the
+# generation surface the LLM sees is tiny (templateId + these params).
+
+id: starter-bundle
+label: Starter Bundle
+description: Core product plus standard support, single quote.
+
+# Typed parameter slots — this list compiles to the tiny "generation schema".
+parameters:
+  - name: opportunityId
+    type: string
+    required: true
+  - name: quantity
+    type: number
+    required: false
+    default: 1
+
+# The fixed record graph. ${param} / ${param|default} are resolved post-parse by
+# TemplateExpander against the params above — NOT string-interpolated into YAML.
+nodes:
+  - alias: quote
+    objectApiName: Quote
+    op: create
+    fields:
+      Name: "Starter Bundle"
+      OpportunityId: "${opportunityId}"
+      Status: "Draft"
+
+  - alias: line_core
+    objectApiName: QuoteLineItem
+    op: create
+    parentAlias: quote
+    parentField: QuoteId
+    fields:
+      Product2Id: "SKU-CORE"        # resolved to PricebookEntryId by the engine
+      Quantity: "${quantity|1}"
+
+  - alias: line_support
+    objectApiName: QuoteLineItem
+    op: create
+    parentAlias: quote
+    parentField: QuoteId
+    fields:
+      Product2Id: "SKU-SUPPORT"
+      Quantity: 1

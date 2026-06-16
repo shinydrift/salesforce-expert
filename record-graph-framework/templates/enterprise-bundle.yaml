@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=../schema/quote-graph.schema.json
+#
+# Enterprise Bundle — demonstrates MULTI-LEVEL composition via `includes:`.
+# It pulls in the starter bundle and layers extra lines on top of the same quote.
+# `includes` is resolved on the parsed object model by TemplateExpander (it merges
+# the included graph, remapping aliases / parent links) — this is how bundle-of-
+# bundles works. Do NOT use YAML anchors for this: anchors cannot span files.
+
+id: enterprise-bundle
+label: Enterprise Bundle
+description: Starter bundle plus premium add-ons and an onboarding line.
+
+parameters:
+  - name: opportunityId
+    type: string
+    required: true
+  - name: quantity
+    type: number
+    required: false
+    default: 10
+  - name: discount
+    type: number
+    required: false
+    default: 0
+
+includes:
+  # Reuse the starter graph; map its `opportunityId` / `quantity` params through.
+  - template: starter-bundle
+    with:
+      opportunityId: "${opportunityId}"
+      quantity: "${quantity}"
+    # Anchor the included graph's root onto an alias we can extend below.
+    rootAlias: quote
+
+nodes:
+  - alias: line_premium
+    objectApiName: QuoteLineItem
+    op: create
+    parentAlias: quote          # the alias exposed by the included starter bundle
+    parentField: QuoteId
+    fields:
+      Product2Id: "SKU-PREMIUM"
+      Quantity: "${quantity|10}"
+      Discount: "${discount|0}"
+
+  - alias: line_onboarding
+    objectApiName: QuoteLineItem
+    op: create
+    parentAlias: quote
+    parentField: QuoteId
+    fields:
+      Product2Id: "SKU-ONBOARDING"
+      Quantity: 1
