@@ -95,7 +95,19 @@ reconciliation), and applies the minimal change set. Optimistic locking via
 
 ## Status
 
-This is a **skeleton**. Alias resolution, topo-sort, and transactional execution
-are implemented; `validate()`, picklist coercion, `TemplateExpander` loading, and
-the child-collection diff are documented stubs marked `TODO` — they need the
-describe-generated schema and the CMDT storage to be wired up for your org.
+**Implemented end-to-end.** Alias resolution, topo-sort, transactional execution,
+describe-based `validate()`, picklist/type coercion, `TemplateExpander` loading from
+`Graph_Template__mdt`, `includes:` merging, and the child-collection diff (with
+`LastModifiedDate` optimistic locking) all work and are test-covered. Domain
+reference resolution (default pricebook + `ProductCode` → `PricebookEntryId`/price)
+runs in the engine before validation.
+
+The runnable surface is `CreateOpportunityWithProducts` + the `opportunity-bundle`
+template (Opportunity → OpportunityLineItem), verified live against a Developer
+Edition org. `CreateQuoteFromTemplate` + the Quote templates remain as the
+documented Quote example and require Quotes to be enabled in the target org.
+
+Still worth doing for production: generating the `quote-graph.schema.json` `$defs`
+from describe at build time (in-Apex validation already enforces the live schema),
+level-by-level DML bulkification (noted in `RecordGraphSync.sync`), and expanding
+optimistic-lock coverage to upserts.

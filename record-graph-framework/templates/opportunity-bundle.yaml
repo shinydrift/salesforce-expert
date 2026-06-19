@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=../schema/quote-graph.schema.json
+#
+# Opportunity Bundle — a single Opportunity with two priced lines. This is the
+# *runnable* bundle for orgs without Quotes enabled. Line items reference products
+# by the synthetic `ProductCode` field, which RecordGraphSync resolves to a real
+# PricebookEntryId against the Opportunity's pricebook (the standard pricebook by
+# default). The agent only supplies the `parameters`.
+
+id: opportunity-bundle
+label: Opportunity Bundle
+description: An Opportunity with a generator line and an SLA line, priced from the standard pricebook.
+
+parameters:
+  - name: name
+    type: string
+    required: true
+  - name: closeDate
+    type: string
+    required: true
+  - name: quantity
+    type: number
+    required: false
+    default: 1
+
+nodes:
+  - alias: opp
+    objectApiName: Opportunity
+    op: create
+    fields:
+      Name: "${name}"
+      StageName: "Prospecting"
+      CloseDate: "${closeDate}"
+      # Pricebook2Id is defaulted to the standard pricebook by the engine.
+
+  - alias: line_generator
+    objectApiName: OpportunityLineItem
+    op: create
+    parentAlias: opp
+    parentField: OpportunityId
+    fields:
+      ProductCode: "GC104"          # GenWatt Diesel 200kW — resolved to PricebookEntryId
+      Quantity: "${quantity|1}"
+
+  - alias: line_sla
+    objectApiName: OpportunityLineItem
+    op: create
+    parentAlias: opp
+    parentField: OpportunityId
+    fields:
+      ProductCode: "SL9040"         # SLA: Silver — resolved to PricebookEntryId
+      Quantity: 1
