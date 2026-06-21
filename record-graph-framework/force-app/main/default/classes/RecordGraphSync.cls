@@ -211,9 +211,12 @@ public with sharing class RecordGraphSync {
             record.put('Id', (Id) node.recordId);
         }
         // Resolve the parent link: child's FK = the parent's freshly-inserted Id.
-        // Only on insert/upsert — parent FKs (e.g. OpportunityId) are not editable on
-        // an existing child, and an update doesn't re-parent it.
-        if (String.isNotBlank(node.parentAlias) && op != 'update') {
+        // Only when this node is actually creating a row — parent FKs (e.g.
+        // OpportunityId) are not editable on an existing child, and editing one
+        // doesn't re-parent it. An upsert that carries a recordId is editing an
+        // existing row, so it must NOT re-write the FK either (see
+        // targetsExistingRecord) — otherwise a non-reparentable FK throws on update.
+        if (String.isNotBlank(node.parentAlias) && !targetsExistingRecord(node, op)) {
             Id parentId = aliasToId.get(node.parentAlias);
             if (parentId == null) {
                 throw new GraphException(
@@ -457,15 +460,16 @@ public with sharing class RecordGraphSync {
      *   - For every existing parent (recordId set) whose children are declared in the
      *     request, any current child of that (parent, object, FK) NOT named in the
      *     request is appended as a delete node (child-collection reconciliation).
-     *   - For every update node carrying expectedLastModified, the live
-     *     LastModifiedDate is compared and a stale write is rejected (optimistic lock).
+     *   - For every update (or upsert that targets an existing record) node carrying
+     *     expectedLastModified, the live LastModifiedDate is compared and a stale write
+     *     is rejected (optimistic lock).
      */
     @TestVisible
     private List<GraphNode> computeDiff(RecordGraphRequest req) {
         List<GraphNode> out = new List<GraphNode>(req.nodes);
         Map<String, GraphNode> byAlias = aliasMap(req.nodes);
 
-        // Optimistic locking on updates.
+        // Optimistic locking on updates and upserts that target an existing record.
         enforceOptimisticLocks(req.nodes);
 
         // Group requested children by (object, fk) so each child collection is
@@ -541,7 +545,10 @@ public with sharing class RecordGraphSync {
         Map<Schema.SObjectType, Set<Id>> idsByType = new Map<Schema.SObjectType, Set<Id>>();
         for (GraphNode n : nodes) {
             String op = String.isBlank(n.op) ? 'create' : n.op.toLowerCase();
-            if (op == 'update' && String.isNotBlank(n.recordId) && String.isNotBlank(n.expectedLastModified)) {
+            // Lock any node that edits an existing row (update, or upsert with a
+            // recordId) and supplies an expectedLastModified to check it against.
+            if (targetsExistingRecord(n, op)
+                && String.isNotBlank(n.recordId) && String.isNotBlank(n.expectedLastModified)) {
                 Id rid = (Id) n.recordId;
                 guarded.put(rid, n);
                 Schema.SObjectType sot = describes.sObjectType(n.objectApiName);
@@ -551,12 +558,15 @@ public with sharing class RecordGraphSync {
                 idsByType.get(sot).add(rid);
             }
         }
+        Set<Id> seen = new Set<Id>();
         for (Schema.SObjectType sot : idsByType.keySet()) {
             String objName = sot.getDescribe().getName();
             Set<Id> ids = idsByType.get(sot);
             for (SObject row : Database.query(
                 'SELECT Id, LastModifiedDate FROM ' + objName + ' WHERE Id IN :ids')) {
-                GraphNode n = guarded.get((Id) row.get('Id'));
+                Id rid = (Id) row.get('Id');
+                seen.add(rid);
+                GraphNode n = guarded.get(rid);
                 Datetime live = (Datetime) row.get('LastModifiedDate');
                 // Compare at second precision in GMT. The client round-trips an ISO
                 // string (e.g. '2026-06-16T10:30:45.123Z'); the live value carries
@@ -566,9 +576,21 @@ public with sharing class RecordGraphSync {
                 if (secondKey(live) != secondKey(parseExpected(n.expectedLastModified))) {
                     throw new GraphException(
                         'optimistic lock failed for node "' + n.alias +
-                        '": record ' + row.get('Id') + ' was modified concurrently'
+                        '": record ' + rid + ' was modified concurrently'
                     );
                 }
+            }
+        }
+        // A guarded record the query didn't return no longer exists — concurrent
+        // delete is the strongest form of conflict, so report it as a lock failure
+        // rather than letting the later DML surface a generic, undiagnosable error.
+        for (Id rid : guarded.keySet()) {
+            if (!seen.contains(rid)) {
+                GraphNode n = guarded.get(rid);
+                throw new GraphException(
+                    'optimistic lock failed for node "' + n.alias +
+                    '": record ' + rid + ' was deleted concurrently'
+                );
             }
         }
     }
@@ -677,6 +699,16 @@ public with sharing class RecordGraphSync {
     }
 
     // --- helpers ---------------------------------------------------------------
+
+    /**
+     * Does this node edit a row that already exists (rather than create a new one)?
+     * True for an update, or an upsert that carries a recordId. A recordId-less upsert
+     * is a create. This is the single place the engine decides "existing vs new" so
+     * the lock guard and the parent-FK back-fill stay in agreement.
+     */
+    private static Boolean targetsExistingRecord(GraphNode node, String op) {
+        return op == 'update' || (op == 'upsert' && String.isNotBlank(node.recordId));
+    }
 
     private Map<String, GraphNode> aliasMap(List<GraphNode> nodes) {
         Map<String, GraphNode> byAlias = new Map<String, GraphNode>();

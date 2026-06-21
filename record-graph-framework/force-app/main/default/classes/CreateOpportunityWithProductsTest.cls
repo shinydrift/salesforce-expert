@@ -54,6 +54,54 @@ private class CreateOpportunityWithProductsTest {
     }
 
     @IsTest
+    static void upsertOfExistingChild_doesNotRewriteParentFk() {
+        // Regression: editing an existing child via op='upsert' (recordId set) must NOT
+        // re-write its parent FK. OpportunityLineItem.OpportunityId is not updateable,
+        // so if the engine treats the upsert like a create and puts OpportunityId, the
+        // whole graph rolls back with a non-writeable-field error for a record whose
+        // parent never changed. With the fix the FK is skipped and the edit succeeds.
+        Id stdPb = Test.getStandardPricebookId();
+        Opportunity opp = new Opportunity(Name = 'Edit Me', StageName = 'Prospecting',
+            CloseDate = Date.today().addDays(10), Pricebook2Id = stdPb);
+        insert opp;
+        PricebookEntry pbe = [
+            SELECT Id, UnitPrice FROM PricebookEntry
+            WHERE Pricebook2Id = :stdPb AND Product2.ProductCode = 'GC104' LIMIT 1
+        ];
+        OpportunityLineItem oli = new OpportunityLineItem(
+            OpportunityId = opp.Id, PricebookEntryId = pbe.Id, Quantity = 1, UnitPrice = pbe.UnitPrice);
+        insert oli;
+
+        // Edit graph: parent named as an update, the existing line edited via upsert
+        // (recordId set) with its OpportunityId FK declared as the parentField.
+        RecordGraphRequest req = new RecordGraphRequest();
+        GraphNode oppNode = new GraphNode();
+        oppNode.alias = 'opp';
+        oppNode.objectApiName = 'Opportunity';
+        oppNode.op = 'update';
+        oppNode.recordId = opp.Id;
+        oppNode.fields = new Map<String, Object>{ 'Name' => 'Edited' };
+        GraphNode lineNode = new GraphNode();
+        lineNode.alias = 'line';
+        lineNode.objectApiName = 'OpportunityLineItem';
+        lineNode.op = 'upsert';
+        lineNode.recordId = oli.Id;
+        lineNode.parentAlias = 'opp';
+        lineNode.parentField = 'OpportunityId';
+        lineNode.fields = new Map<String, Object>{ 'Quantity' => 3 };
+        req.nodes.add(oppNode);
+        req.nodes.add(lineNode);
+
+        Test.startTest();
+        RecordGraphResult result = new RecordGraphSync().sync(req);
+        Test.stopTest();
+
+        System.assert(result.success, 'upsert of existing child should not re-write the parent FK: ' + result.message);
+        System.assertEquals(3, [SELECT Quantity FROM OpportunityLineItem WHERE Id = :oli.Id].Quantity,
+            'the line quantity edit was applied');
+    }
+
+    @IsTest
     static void run_unknownProductCode_failsCleanly() {
         // A template whose product code has no PricebookEntry should roll back with a
         // clear message rather than throwing. Drive the engine directly with a bad code.
