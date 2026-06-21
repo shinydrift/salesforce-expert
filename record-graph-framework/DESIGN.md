@@ -107,7 +107,12 @@ template (Opportunity → OpportunityLineItem), verified live against a Develope
 Edition org. `CreateQuoteFromTemplate` + the Quote templates remain as the
 documented Quote example and require Quotes to be enabled in the target org.
 
+DML is bulkified: `sync` applies the graph level-by-level, issuing one DML
+statement per `(object, op)` bucket per level, so the statement count is
+`O(levels × objects × ops)` rather than `O(nodes)` and a wide graph no longer
+risks the 150-statement governor limit (covered by
+`sync_bulkifiesDmlIndependentOfWidth`).
+
 Still worth doing for production: generating the `quote-graph.schema.json` `$defs`
 from describe at build time (in-Apex validation already enforces the live schema),
-level-by-level DML bulkification (noted in `RecordGraphSync.sync`), and expanding
-optimistic-lock coverage to upserts.
+and expanding optimistic-lock coverage to upserts.
