@@ -248,4 +248,43 @@ private class RecordGraphSyncTest {
         System.assertEquals('Renamed', [SELECT Name FROM Account WHERE Id = :a.Id].Name,
             'update should have been applied');
     }
+
+    // --- DML bulkification ----------------------------------------------------
+
+    @IsTest
+    static void sync_bulkifiesDmlIndependentOfWidth() {
+        // The point of bulkification: DML cost depends on (levels x objects x ops),
+        // NOT on node count. We prove that by syncing a narrow graph (1 child) and a
+        // wide graph (200 children) of the same shape and asserting they consume the
+        // SAME number of DML statements. Pre-bulkification the wide graph would have
+        // used ~200 more statements and breached the 150-statement governor limit.
+        Integer narrowDml = widthSyncDml(1, 'Narrow Corp');
+        Integer wideDml = widthSyncDml(200, 'Wide Corp');
+
+        System.assertEquals(narrowDml, wideDml,
+            'DML count must be constant in graph width (1 child=' + narrowDml +
+            ', 200 children=' + wideDml + ')');
+        // Sanity: a 200-child graph stays well under the 150-statement limit.
+        System.assert(wideDml < 150, 'wide graph uses ' + wideDml + ' DML statements');
+        System.assertEquals(200,
+            [SELECT COUNT() FROM Contact WHERE Account.Name = 'Wide Corp'],
+            'every child of the wide graph persisted and linked');
+    }
+
+    /** Sync one parent with `childCount` contacts and return the DML statements used. */
+    private static Integer widthSyncDml(Integer childCount, String acctName) {
+        RecordGraphRequest req = new RecordGraphRequest();
+        req.nodes.add(node('acct', 'Account', 'create', null, null,
+            new Map<String, Object>{ 'Name' => acctName }));
+        for (Integer i = 0; i < childCount; i++) {
+            req.nodes.add(node('c' + i, 'Contact', 'create', 'acct', 'AccountId',
+                new Map<String, Object>{ 'LastName' => 'Child' + i }));
+        }
+        Integer before = Limits.getDmlStatements();
+        RecordGraphResult result = new RecordGraphSync().sync(req);
+        Integer used = Limits.getDmlStatements() - before;
+        System.assert(result.success, result.message);
+        System.assertEquals(childCount + 1, result.aliasToId.size(), 'parent + all children persisted');
+        return used;
+    }
 }

@@ -65,15 +65,16 @@ public with sharing class RecordGraphSync {
             //    enforces optimistic locks).
             List<GraphNode> reconciled = computeDiff(req);
 
-            // d. Order so parents are processed before children.
-            List<GraphNode> ordered = topoSort(reconciled);
+            // d. Order so parents are processed before children, then split into
+            //    breadth levels (a node's level is its parent's + 1).
+            List<List<GraphNode>> levels = groupByLevel(topoSort(reconciled));
 
-            // e. Resolve + apply — all-or-nothing.
-            // TODO bulkify: this issues one DML per node and will hit the 150
-            // DML-statements limit on large graphs. Process level-by-level and run
-            // one DML per (object, op) group once parent Ids for the level are known.
-            for (GraphNode node : ordered) {
-                applyNode(node, aliasToId, result);
+            // e. Resolve + apply level-by-level — all-or-nothing. Each level issues
+            //    one DML per (object, op) bucket, so the statement count is
+            //    O(levels x objects x ops) rather than O(nodes). Every node's parent
+            //    sits at a strictly lower level, so its Id is already resolved.
+            for (List<GraphNode> level : levels) {
+                applyLevel(level, aliasToId, result);
             }
             result.success = true;
             result.message = 'Graph synced: ' + result.aliasToId.size() + ' record(s) persisted';
@@ -88,40 +89,110 @@ public with sharing class RecordGraphSync {
         return result;
     }
 
-    // --- core: apply one node -------------------------------------------------
+    // --- core: apply one breadth level ----------------------------------------
 
-    private void applyNode(GraphNode node, Map<String, Id> aliasToId, RecordGraphResult result) {
-        String op = String.isBlank(node.op) ? 'create' : node.op.toLowerCase();
-
-        if (op == 'delete') {
-            if (String.isBlank(node.recordId)) {
-                throw new GraphException('delete node "' + node.alias + '" has no recordId');
+    /**
+     * Split a topo-ordered list into breadth levels. A node's level is its parent's
+     * level + 1 (roots and orphan-delete nodes are level 0). Because each node has at
+     * most one parent (single parentAlias), levels are unambiguous, and iterating the
+     * already parent-before-child ordering means a parent's level is known before its
+     * children are reached.
+     */
+    private List<List<GraphNode>> groupByLevel(List<GraphNode> ordered) {
+        Map<String, Integer> levelByAlias = new Map<String, Integer>();
+        List<List<GraphNode>> levels = new List<List<GraphNode>>();
+        for (GraphNode n : ordered) {
+            Integer lvl = 0;
+            if (String.isNotBlank(n.parentAlias) && levelByAlias.containsKey(n.parentAlias)) {
+                lvl = levelByAlias.get(n.parentAlias) + 1;
             }
-            Database.delete((Id) node.recordId, true);
-            result.record(node.alias, node.objectApiName, op, (Id) node.recordId, true, null);
+            levelByAlias.put(n.alias, lvl);
+            while (levels.size() <= lvl) {
+                levels.add(new List<GraphNode>());
+            }
+            levels.get(lvl).add(n);
+        }
+        return levels;
+    }
+
+    /**
+     * Apply one level: bucket its nodes by (objectApiName, op) and issue a single bulk
+     * DML per bucket. All parent Ids are already resolved (parents live at lower levels),
+     * so order within a level is irrelevant for FK back-filling.
+     *
+     * Buckets run in first-appearance order, which batches same-op nodes together rather
+     * than preserving strict per-node order within the level. That is safe for this
+     * framework's only delete source — orphan-reconciliation deletes, which computeDiff
+     * appends last, so they still bucket (and run) after this level's creates/updates,
+     * exactly as the prior per-node loop did. Batching same-op together is what keeps the
+     * DML count bounded; it does not reorder anything across levels.
+     */
+    private void applyLevel(List<GraphNode> level, Map<String, Id> aliasToId, RecordGraphResult result) {
+        Map<String, List<GraphNode>> byBucket = new Map<String, List<GraphNode>>();
+        List<String> bucketOrder = new List<String>();
+        for (GraphNode n : level) {
+            String op = String.isBlank(n.op) ? 'create' : n.op.toLowerCase();
+            if (op != 'create' && op != 'update' && op != 'upsert' && op != 'delete') {
+                throw new GraphException('unknown op "' + n.op + '" on node "' + n.alias + '"');
+            }
+            String key = n.objectApiName + '|' + op;
+            if (!byBucket.containsKey(key)) {
+                byBucket.put(key, new List<GraphNode>());
+                bucketOrder.add(key);
+            }
+            byBucket.get(key).add(n);
+        }
+        for (String key : bucketOrder) {
+            applyBucket(key.substringAfterLast('|'), byBucket.get(key), aliasToId, result);
+        }
+    }
+
+    /** Apply one (object, op) bucket of nodes with a single bulk DML statement. */
+    private void applyBucket(String op, List<GraphNode> nodes,
+                             Map<String, Id> aliasToId, RecordGraphResult result) {
+        if (op == 'delete') {
+            List<Id> ids = new List<Id>();
+            for (GraphNode n : nodes) {
+                if (String.isBlank(n.recordId)) {
+                    throw new GraphException('delete node "' + n.alias + '" has no recordId');
+                }
+                ids.add((Id) n.recordId);
+            }
+            Database.delete(ids, true);
+            for (GraphNode n : nodes) {
+                result.record(n.alias, n.objectApiName, op, (Id) n.recordId, true, null);
+            }
             return;
         }
 
-        SObject record = buildSObject(node, aliasToId, op);
+        // SObject list stays index-parallel to `nodes` so freshly-assigned Ids map back.
+        List<SObject> records = new List<SObject>();
+        for (GraphNode n : nodes) {
+            SObject record = buildSObject(n, aliasToId, op);
+            if (op == 'update' && record.Id == null) {
+                throw new GraphException('update node "' + n.alias + '" has no recordId');
+            }
+            records.add(record);
+        }
 
         if (op == 'create') {
-            Database.insert(record, true);
+            Database.insert(records, true);
         } else if (op == 'update') {
-            if (record.Id == null) {
-                throw new GraphException('update node "' + node.alias + '" has no recordId');
-            }
-            Database.update(record, true);
+            Database.update(records, true);
         } else if (op == 'upsert') {
-            // Id-based upsert; single-record upsert throws on failure, which the
+            // Id-based bulk upsert; allOrNone throws on any failure, which the
             // surrounding savepoint/try-catch turns into a rollback.
-            Database.upsert(record);
-        } else {
-            throw new GraphException('unknown op "' + node.op + '" on node "' + node.alias + '"');
+            Database.upsert(records, true);
         }
-        // Make this node's freshly-resolved Id available to later children whose
-        // parentAlias points at it (buildSObject reads this map to back-fill the FK).
-        aliasToId.put(node.alias, record.Id);
-        result.record(node.alias, node.objectApiName, op, record.Id, true, null);
+
+        for (Integer i = 0; i < nodes.size(); i++) {
+            GraphNode n = nodes[i];
+            Id rid = records[i].Id;
+            // Make this node's freshly-resolved Id available to later children whose
+            // parentAlias points at it (buildSObject reads this map to back-fill the FK).
+            aliasToId.put(n.alias, rid);
+            result.record(n.alias, n.objectApiName, op, rid, true, null);
+        }
     }
 
     /** Build an SObject from a node, back-filling the parent FK from the alias map. */
