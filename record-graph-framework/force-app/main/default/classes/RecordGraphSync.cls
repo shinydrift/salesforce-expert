@@ -457,15 +457,16 @@ public with sharing class RecordGraphSync {
      *   - For every existing parent (recordId set) whose children are declared in the
      *     request, any current child of that (parent, object, FK) NOT named in the
      *     request is appended as a delete node (child-collection reconciliation).
-     *   - For every update node carrying expectedLastModified, the live
-     *     LastModifiedDate is compared and a stale write is rejected (optimistic lock).
+     *   - For every update (or upsert that targets an existing record) node carrying
+     *     expectedLastModified, the live LastModifiedDate is compared and a stale write
+     *     is rejected (optimistic lock).
      */
     @TestVisible
     private List<GraphNode> computeDiff(RecordGraphRequest req) {
         List<GraphNode> out = new List<GraphNode>(req.nodes);
         Map<String, GraphNode> byAlias = aliasMap(req.nodes);
 
-        // Optimistic locking on updates.
+        // Optimistic locking on updates and upserts that target an existing record.
         enforceOptimisticLocks(req.nodes);
 
         // Group requested children by (object, fk) so each child collection is
@@ -541,7 +542,10 @@ public with sharing class RecordGraphSync {
         Map<Schema.SObjectType, Set<Id>> idsByType = new Map<Schema.SObjectType, Set<Id>>();
         for (GraphNode n : nodes) {
             String op = String.isBlank(n.op) ? 'create' : n.op.toLowerCase();
-            if (op == 'update' && String.isNotBlank(n.recordId) && String.isNotBlank(n.expectedLastModified)) {
+            // Updates always target an existing record; an upsert does too whenever it
+            // carries a recordId (a recordId-less upsert is a create — nothing to lock).
+            if ((op == 'update' || op == 'upsert')
+                && String.isNotBlank(n.recordId) && String.isNotBlank(n.expectedLastModified)) {
                 Id rid = (Id) n.recordId;
                 guarded.put(rid, n);
                 Schema.SObjectType sot = describes.sObjectType(n.objectApiName);
