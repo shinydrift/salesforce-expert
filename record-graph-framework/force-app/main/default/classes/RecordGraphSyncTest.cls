@@ -271,6 +271,34 @@ private class RecordGraphSyncTest {
             'every child of the wide graph persisted and linked');
     }
 
+    @IsTest
+    static void sync_runsDeletesBeforeCreatesWithinLevel() {
+        // Within one breadth level the engine must apply deletes before creates, so a
+        // record that frees a unique key is gone before any create that would reuse it.
+        // The create is listed FIRST, so first-appearance bucket order would run it
+        // before the delete; op-priority ordering must override that.
+        Account doomed = new Account(Name = 'Doomed');
+        insert doomed;
+
+        RecordGraphRequest req = new RecordGraphRequest();
+        req.nodes.add(node('fresh', 'Account', 'create', null, null,
+            new Map<String, Object>{ 'Name' => 'Fresh' }));
+        GraphNode del = node('gone', 'Account', 'delete', null, null, null);
+        del.recordId = doomed.Id;
+        req.nodes.add(del);
+
+        Test.startTest();
+        RecordGraphResult result = new RecordGraphSync().sync(req);
+        Test.stopTest();
+
+        System.assert(result.success, result.message);
+        System.assertEquals('delete', result.nodeResults[0].op,
+            'within a level, deletes apply before creates');
+        System.assertEquals('gone', result.nodeResults[0].alias);
+        System.assertEquals(0, [SELECT COUNT() FROM Account WHERE Id = :doomed.Id],
+            'doomed record was deleted');
+    }
+
     /** Sync one parent with `childCount` contacts and return the DML statements used. */
     private static Integer widthSyncDml(Integer childCount, String acctName) {
         RecordGraphRequest req = new RecordGraphRequest();

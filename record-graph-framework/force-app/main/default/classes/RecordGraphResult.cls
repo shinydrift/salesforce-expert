@@ -9,7 +9,11 @@ public class RecordGraphResult {
     /** alias -> real record Id for every node that ended up persisted. */
     public Map<String, Id> aliasToId;
 
-    /** Per-node outcome, in execution order. */
+    /**
+     * Per-node outcome, in execution order: parents before children (breadth level by
+     * level), and within a level grouped by op (delete, update, upsert, create) then by
+     * object — the order the engine's bulk DML actually applied them.
+     */
     public List<NodeResult> nodeResults;
 
     public RecordGraphResult() {

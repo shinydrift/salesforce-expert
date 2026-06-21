@@ -118,21 +118,23 @@ public with sharing class RecordGraphSync {
     /**
      * Apply one level: bucket its nodes by (objectApiName, op) and issue a single bulk
      * DML per bucket. All parent Ids are already resolved (parents live at lower levels),
-     * so order within a level is irrelevant for FK back-filling.
+     * so bucket order never affects FK back-filling.
      *
-     * Buckets run in first-appearance order, which batches same-op nodes together rather
-     * than preserving strict per-node order within the level. That is safe for this
-     * framework's only delete source — orphan-reconciliation deletes, which computeDiff
-     * appends last, so they still bucket (and run) after this level's creates/updates,
-     * exactly as the prior per-node loop did. Batching same-op together is what keeps the
-     * DML count bounded; it does not reorder anything across levels.
+     * Within a level the buckets run in a fixed op order — delete, then update, upsert,
+     * create — so a record that frees a unique key (or is otherwise removed/changed) is
+     * processed before any create that might reuse it. Siblings at the same level have no
+     * FK dependency on each other, so this ordering is the only intra-level concern.
+     * Among buckets sharing an op (different objects), first-appearance order is kept.
      */
+    private static final List<String> OP_ORDER =
+        new List<String>{ 'delete', 'update', 'upsert', 'create' };
+
     private void applyLevel(List<GraphNode> level, Map<String, Id> aliasToId, RecordGraphResult result) {
         Map<String, List<GraphNode>> byBucket = new Map<String, List<GraphNode>>();
         List<String> bucketOrder = new List<String>();
         for (GraphNode n : level) {
             String op = String.isBlank(n.op) ? 'create' : n.op.toLowerCase();
-            if (op != 'create' && op != 'update' && op != 'upsert' && op != 'delete') {
+            if (!OP_ORDER.contains(op)) {
                 throw new GraphException('unknown op "' + n.op + '" on node "' + n.alias + '"');
             }
             String key = n.objectApiName + '|' + op;
@@ -142,8 +144,13 @@ public with sharing class RecordGraphSync {
             }
             byBucket.get(key).add(n);
         }
-        for (String key : bucketOrder) {
-            applyBucket(key.substringAfterLast('|'), byBucket.get(key), aliasToId, result);
+        // Run buckets grouped by op priority; first-appearance order breaks ties.
+        for (String op : OP_ORDER) {
+            for (String key : bucketOrder) {
+                if (key.substringAfterLast('|') == op) {
+                    applyBucket(op, byBucket.get(key), aliasToId, result);
+                }
+            }
         }
     }
 
