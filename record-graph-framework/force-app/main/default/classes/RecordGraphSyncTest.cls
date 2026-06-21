@@ -300,6 +300,55 @@ private class RecordGraphSyncTest {
             'upsert should have been applied');
     }
 
+    @IsTest
+    static void optimisticLock_rejectsConcurrentlyDeletedRecord() {
+        // The guarded record is gone by the time we sync (deleted concurrently). The
+        // lock must report a clear "deleted concurrently" failure rather than letting
+        // the later DML surface a generic, undiagnosable error.
+        Account a = new Account(Name = 'Acme');
+        insert a;
+        Datetime lm = [SELECT LastModifiedDate FROM Account WHERE Id = :a.Id].LastModifiedDate;
+        String iso = lm.formatGmt('yyyy-MM-dd\'T\'HH:mm:ss.SSS\'Z\'');
+        Id deletedId = a.Id;
+        delete a;
+
+        RecordGraphRequest req = new RecordGraphRequest();
+        GraphNode n = node('acct', 'Account', 'upsert', null, null,
+            new Map<String, Object>{ 'Name' => 'Renamed' });
+        n.recordId = deletedId;
+        n.expectedLastModified = iso; // was valid before the concurrent delete
+        req.nodes.add(n);
+
+        Test.startTest();
+        RecordGraphResult result = new RecordGraphSync().sync(req);
+        Test.stopTest();
+
+        System.assert(!result.success, 'upsert against a deleted record should fail');
+        System.assert(result.message.contains('optimistic lock'), result.message);
+        System.assert(result.message.contains('deleted concurrently'), result.message);
+    }
+
+    @IsTest
+    static void optimisticLock_ignoresExpectedOnRecordlessUpsert() {
+        // A recordId-less upsert is a *create*. Even if the caller supplies an
+        // expectedLastModified (e.g. boilerplate that always sets it), there is no
+        // existing row to lock against, so it must NOT lock-fail — it must insert.
+        RecordGraphRequest req = new RecordGraphRequest();
+        GraphNode n = node('acct', 'Account', 'upsert', null, null,
+            new Map<String, Object>{ 'Name' => 'Brand New' });
+        // recordId deliberately left null; expectedLastModified set but irrelevant.
+        n.expectedLastModified = '2000-01-01T00:00:00Z';
+        req.nodes.add(n);
+
+        Test.startTest();
+        RecordGraphResult result = new RecordGraphSync().sync(req);
+        Test.stopTest();
+
+        System.assert(result.success, 'recordId-less upsert should insert, not lock-fail: ' + result.message);
+        System.assertEquals(1, [SELECT COUNT() FROM Account WHERE Name = 'Brand New'],
+            'a new record was inserted');
+    }
+
     // --- DML bulkification ----------------------------------------------------
 
     @IsTest
