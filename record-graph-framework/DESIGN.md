@@ -71,8 +71,12 @@ reconciliation), and applies the minimal change set. Optimistic locking via
 - **JSON** — the runtime/wire/DML format. Apex deserializes JSON with the native
   `JSON` class and **never parses YAML**.
 - **Build steps** (outside Apex, in the tooling tier):
-  1. `describe → base JSON Schema` — a script pulls field + picklist metadata so
-     the schema stays in sync with the org.
+  1. `describe → base JSON Schema` — `scripts/build-schema.mjs` pulls field +
+     picklist metadata and regenerates the per-object `$defs` so the schema stays
+     in sync with the org (`node scripts/build-schema.mjs --target-org <alias>`).
+     With no org it reads checked-in describe fixtures under `scripts/describe/`,
+     so the build runs in CI. The object list is driven by the schema's own
+     `node.objectApiName` enum — one source of truth.
   2. `YAML template → JSON → Custom Metadata Type record` — templates are authored
      in YAML in git, compiled to JSON, and published as `Quote_Template__mdt`
      (or Static Resource) so Apex reads JSON at runtime and admins can tweak
@@ -113,6 +117,17 @@ statement per `(object, op)` bucket per level, so the statement count is
 risks the 150-statement governor limit (covered by
 `sync_bulkifiesDmlIndependentOfWidth`).
 
-Still worth doing for production: generating the `quote-graph.schema.json` `$defs`
-from describe at build time (in-Apex validation already enforces the live schema),
-and expanding optimistic-lock coverage to upserts.
+The `quote-graph.schema.json` `$defs` are now generated from describe by
+`scripts/build-schema.mjs` (field types, live picklist enums, `maxLength`, and
+required fields), wired into `node` via `objectApiName` conditionals, and covered
+by a draft-07 smoke test (`scripts/schema-smoke.mjs`). Optimistic-lock coverage
+now includes upserts.
+
+Note on what the base schema validates: it describes the **resolved** graph (FKs
+back-filled from `parentAlias`, `ProductCode` already resolved to a
+`PricebookEntryId`, `${param}` placeholders substituted). Reference/FK fields are
+deliberately omitted from `required` because the engine fills them. The raw YAML
+templates are the *pre-resolution* authoring surface (placeholders, the synthetic
+`ProductCode`, omitted FKs), so they are a looser surface than this schema — a
+dedicated, template-derived generation schema for in-IDE template authoring is a
+sensible follow-up.

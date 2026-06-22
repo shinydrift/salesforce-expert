@@ -2,7 +2,16 @@
   "name": "record-graph-framework-tooling",
   "private": true,
   "type": "module",
+  "scripts": {
+    "build:templates": "node scripts/build-templates.mjs",
+    "build:schema": "node scripts/build-schema.mjs",
+    "test:schema": "node scripts/schema-smoke.mjs"
+  },
   "dependencies": {
     "js-yaml": "^4.2.0"
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1"
   }
 }

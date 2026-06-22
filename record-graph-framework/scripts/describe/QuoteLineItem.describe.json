@@ -1,0 +1,18 @@
+{
+  "status": 0,
+  "result": {
+    "name": "QuoteLineItem",
+    "fields": [
+      { "name": "QuoteId", "label": "Quote ID", "type": "reference", "length": 18, "createable": true, "updateable": false, "nillable": false, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false, "referenceTo": ["Quote"] },
+      { "name": "PricebookEntryId", "label": "Price Book Entry ID", "type": "reference", "length": 18, "createable": true, "updateable": false, "nillable": false, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false, "referenceTo": ["PricebookEntry"] },
+      { "name": "Product2Id", "label": "Product ID", "type": "reference", "length": 18, "createable": false, "updateable": false, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false, "referenceTo": ["Product2"] },
+      { "name": "Quantity", "label": "Quantity", "type": "double", "createable": true, "updateable": true, "nillable": false, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "UnitPrice", "label": "Sales Price", "type": "currency", "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "Discount", "label": "Discount", "type": "percent", "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "Description", "label": "Line Item Description", "type": "textarea", "length": 255, "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "ServiceDate", "label": "Date", "type": "date", "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "TotalPrice", "label": "Total Price", "type": "currency", "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "LineNumber", "label": "Line Number", "type": "string", "length": 255, "createable": false, "updateable": false, "nillable": false, "defaultedOnCreate": true, "calculated": false, "deprecatedAndHidden": false }
+    ]
+  }
+}
