@@ -125,8 +125,11 @@ now includes upserts.
 
 Note on what the base schema validates: it describes the **resolved** graph (FKs
 back-filled from `parentAlias`, `ProductCode` already resolved to a
-`PricebookEntryId`, `${param}` placeholders substituted). Reference/FK fields are
-deliberately omitted from `required` because the engine fills them. The raw YAML
+`PricebookEntryId`, `${param}` placeholders substituted). Field/type/enum
+constraints apply on every op, but create-required fields are demanded only on
+`op: create` — `update`/`upsert`/`delete` legitimately carry a subset (or, for
+`delete`, none). Reference/FK fields are also omitted from `required` because the
+engine fills them. The raw YAML
 templates are the *pre-resolution* authoring surface (placeholders, the synthetic
 `ProductCode`, omitted FKs), so they are a looser surface than this schema — a
 dedicated, template-derived generation schema for in-IDE template authoring is a

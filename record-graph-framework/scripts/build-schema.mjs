@@ -47,6 +47,16 @@ const orgFlag = argv.indexOf('--target-org');
 const targetOrg = orgFlag !== -1 ? argv[orgFlag + 1] : null;
 
 // --- describe source --------------------------------------------------------
+/** Unwrap the `{ status, result }` envelope `sf ... --json` adds (fixtures match)
+ *  and assert it's a real describe before any caller trusts or persists it. */
+function unwrap(raw, object) {
+  const result = raw && raw.result ? raw.result : raw;
+  if (!result || !Array.isArray(result.fields)) {
+    throw new Error(`describe for ${object} has no fields array`);
+  }
+  return result;
+}
+
 /** Pull describe live and refresh the checked-in fixture. */
 function describeFromOrg(object) {
   const out = execFileSync(
@@ -54,14 +64,17 @@ function describeFromOrg(object) {
     ['sobject', 'describe', '--sobject', object, '--target-org', targetOrg, '--json'],
     { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
   );
+  const parsed = JSON.parse(out);
+  // Validate BEFORE writing — a 0-exit-but-malformed response must not clobber a
+  // good checked-in fixture.
+  const result = unwrap(parsed, object);
   if (!existsSync(fixturesDir)) mkdirSync(fixturesDir, { recursive: true });
   // Re-serialize so the fixture is stable/pretty rather than one long CLI line.
-  const parsed = JSON.parse(out);
   writeFileSync(
     join(fixturesDir, `${object}.describe.json`),
     JSON.stringify(parsed, null, 2) + '\n',
   );
-  return parsed;
+  return result;
 }
 
 /** Read the checked-in fixture (offline default). */
@@ -73,17 +86,11 @@ function describeFromFixture(object) {
         `Run with --target-org <alias> to generate it from a live org.`,
     );
   }
-  return JSON.parse(readFileSync(path, 'utf8'));
+  return unwrap(JSON.parse(readFileSync(path, 'utf8')), object);
 }
 
 function describeOf(object) {
-  const raw = targetOrg ? describeFromOrg(object) : describeFromFixture(object);
-  // `sf ... --json` wraps the describe in { status, result }; fixtures match.
-  const result = raw && raw.result ? raw.result : raw;
-  if (!result || !Array.isArray(result.fields)) {
-    throw new Error(`describe for ${object} has no fields array`);
-  }
-  return result;
+  return targetOrg ? describeFromOrg(object) : describeFromFixture(object);
 }
 
 // --- field describe -> JSON Schema property ---------------------------------
@@ -96,6 +103,8 @@ function activePicklistValues(field) {
     .filter((p) => p.active !== false)
     .map((p) => p.value);
 }
+
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** True if the field is something a caller can write at all. */
 function isWritable(field) {
@@ -119,11 +128,22 @@ function isRequired(field) {
 function propertyFor(field) {
   const prop = {};
   switch (field.type) {
-    case 'picklist':
-    case 'multipicklist': {
+    case 'picklist': {
       prop.type = 'string';
       const values = activePicklistValues(field);
       if (values.length) prop.enum = values;
+      break;
+    }
+    case 'multipicklist': {
+      // A multi-select value is a semicolon-delimited combination of active
+      // values (e.g. "A;B"), so a flat enum would reject every real combo.
+      // Constrain with a pattern over the active values instead.
+      prop.type = 'string';
+      const values = activePicklistValues(field);
+      if (values.length) {
+        const alt = values.map(escapeRegex).join('|');
+        prop.pattern = `^(${alt})(;(${alt}))*$`;
+      }
       break;
     }
     case 'boolean':
@@ -167,6 +187,13 @@ function defNameFor(object) {
   return object.charAt(0).toLowerCase() + object.slice(1) + 'Fields';
 }
 
+/**
+ * Returns the per-object fields schema (types, enums, maxLength,
+ * additionalProperties) and its create-time `required` list — kept SEPARATE so
+ * the schema can apply field/type/enum constraints on every op but only demand
+ * `required` on `op: create`. update/delete/upsert legitimately touch a subset
+ * (or, for delete, none) of the fields.
+ */
 function fieldsDefFor(object, describe) {
   const writable = describe.fields.filter(isWritable);
   const properties = {};
@@ -184,8 +211,7 @@ function fieldsDefFor(object, describe) {
     additionalProperties: false,
     properties,
   };
-  if (required.length) def.required = required;
-  return def;
+  return { def, required };
 }
 
 // --- splice generated defs into the schema ----------------------------------
@@ -196,6 +222,9 @@ if (!Array.isArray(objects) || objects.length === 0) {
   throw new Error('schema $defs.node.properties.objectApiName.enum is missing — nothing to generate');
 }
 
+// Tags the allOf conditionals this script owns, so re-runs replace exactly them.
+const GEN_TAG = 'generated:objectApiName-fields';
+
 // 1. Rebuild $defs: keep hand-authored entries, drop previously-generated ones.
 const handAuthored = {};
 for (const [key, val] of Object.entries(schema.$defs)) {
@@ -205,31 +234,52 @@ for (const [key, val] of Object.entries(schema.$defs)) {
 }
 
 const generatedDefs = {};
+const requiredByObject = {};
 const defNameByObject = {};
 for (const object of objects) {
   const name = defNameFor(object);
   defNameByObject[object] = name;
-  generatedDefs[name] = fieldsDefFor(object, describeOf(object));
+  const { def, required } = fieldsDefFor(object, describeOf(object));
+  generatedDefs[name] = def;
+  requiredByObject[object] = required;
 }
 
+schema.$comment = GENERATED_MARKER;
 schema.$defs = {
   ...handAuthored,
-  _generated: GENERATED_MARKER,
   ...Object.fromEntries(Object.keys(generatedDefs).sort().map((k) => [k, generatedDefs[k]])),
 };
 
-// 2. Wire each object's fields def into node via a conditional on objectApiName.
-//    Keep hand-authored conditionals (those without a #/$defs/*Fields fields ref).
+// 2. Wire each object's fields into node. Two conditionals per object:
+//    - field/type/enum/additionalProperties constraints on every op;
+//    - create-time `required` only when op === create.
+//    Keep hand-authored conditionals; drop ones this script previously emitted
+//    (tagged, with a fallback heuristic to migrate untagged earlier output).
 const node = schema.$defs.node;
 const isGeneratedConditional = (entry) => {
-  const ref = entry?.then?.properties?.fields?.$ref;
-  return typeof ref === 'string' && ref.startsWith('#/$defs/') && ref.endsWith('Fields');
+  if (entry && entry.$comment === GEN_TAG) return true;
+  const fields = entry?.then?.properties?.fields;
+  if (fields && typeof fields.$ref === 'string' && fields.$ref.endsWith('Fields')) return true;
+  if (fields && Array.isArray(fields.required)) return true;
+  return false;
 };
 const baseAllOf = (node.allOf || []).filter((e) => !isGeneratedConditional(e));
-const fieldConditionals = objects.map((object) => ({
-  if: { properties: { objectApiName: { const: object } } },
-  then: { properties: { fields: { $ref: `#/$defs/${defNameByObject[object]}` } } },
-}));
+const fieldConditionals = [];
+for (const object of objects) {
+  fieldConditionals.push({
+    $comment: GEN_TAG,
+    if: { properties: { objectApiName: { const: object } } },
+    then: { properties: { fields: { $ref: `#/$defs/${defNameByObject[object]}` } } },
+  });
+  const required = requiredByObject[object];
+  if (required.length) {
+    fieldConditionals.push({
+      $comment: GEN_TAG,
+      if: { properties: { objectApiName: { const: object }, op: { const: 'create' } } },
+      then: { properties: { fields: { required } } },
+    });
+  }
+}
 node.allOf = [...baseAllOf, ...fieldConditionals];
 
 // 3. Write back deterministically.
@@ -242,8 +292,9 @@ console.log(
 );
 for (const object of objects) {
   const def = generatedDefs[defNameByObject[object]];
+  const required = requiredByObject[object];
   console.log(
     `  ${object}: ${Object.keys(def.properties).length} field(s)` +
-      (def.required ? `, ${def.required.length} required` : ''),
+      (required.length ? `, ${required.length} required on create` : ''),
   );
 }

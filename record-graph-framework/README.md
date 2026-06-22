@@ -71,9 +71,18 @@ node scripts/schema-smoke.mjs                      # draft-07 smoke test (needs 
 ```
 
 The object list is the schema's own `node.objectApiName` enum, so adding an object
-there and re-running is all it takes. Output is deterministic and idempotent.
-Apex runtime validation does **not** read this file — it validates against live
-describe — so the schema serves authoring/LLM tooling, not the engine.
+there and re-running is all it takes. Output is deterministic and idempotent for a
+given describe input (field/`required` keys are sorted; picklist `enum`s preserve
+the org's display order). Field/type/enum constraints apply on every op;
+create-required fields are demanded only on `op: create` (edits and deletes touch
+a subset). Apex runtime validation does **not** read this file — it validates
+against live describe — so the schema serves authoring/LLM tooling, not the engine.
+
+The checked-in `scripts/describe/*.describe.json` fixtures are a **curated subset**
+of fields so the build runs offline / in CI. Because the generated defs use
+`additionalProperties: false`, the offline schema only accepts the fixtured fields;
+run `--target-org <alias>` to regenerate from a full describe (and refresh the
+fixtures) before relying on the schema to validate arbitrary real-org fields.
 
 `opportunity-bundle` is the runnable bundle (Opportunity + two priced lines).
 `starter-bundle` / `enterprise-bundle` are the Quote examples; `enterprise-bundle`

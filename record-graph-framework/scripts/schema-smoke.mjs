@@ -41,7 +41,7 @@ const cases = [
     nodes: [{ alias: 'q', objectApiName: 'Quote', op: 'create',
       fields: { Name: 'Q', Status: 'Retired' } }],
   }, false],
-  ['missing required field rejected', {
+  ['missing required field rejected (create)', {
     nodes: [{ alias: 'opp', objectApiName: 'Opportunity', op: 'create',
       fields: { Name: 'A', StageName: 'Prospecting' } }],
   }, false],
@@ -51,6 +51,24 @@ const cases = [
   }, false],
   ['update without id rejected', {
     nodes: [{ alias: 'q', objectApiName: 'Quote', op: 'update', fields: { Name: 'Q' } }],
+  }, false],
+  // required is create-only: edits legitimately touch a subset of fields.
+  ['update accepts a partial field set (no create-required demanded)', {
+    nodes: [{ alias: 'q', objectApiName: 'Quote', op: 'update', id: '0Q0000000000001',
+      fields: { Status: 'Approved' } }],
+  }, true],
+  ['upsert accepts a partial field set', {
+    nodes: [{ alias: 'opp', objectApiName: 'Opportunity', op: 'upsert', id: '0060000000000001',
+      fields: { Amount: 99 } }],
+  }, true],
+  ['delete accepts an empty field set', {
+    nodes: [{ alias: 'q', objectApiName: 'Quote', op: 'delete', id: '0Q0000000000001',
+      fields: {} }],
+  }, true],
+  // type/enum/unknown-field constraints still apply on update.
+  ['unknown field rejected on update too', {
+    nodes: [{ alias: 'q', objectApiName: 'Quote', op: 'update', id: '0Q0000000000001',
+      fields: { Bogus__c: 'x' } }],
   }, false],
 ];
 
