@@ -13,8 +13,11 @@ covered by tests.
 ## Layout
 
 ```
-schema/quote-graph.schema.json     base graph contract (JSON Schema)
+schema/quote-graph.schema.json     base graph contract (JSON Schema; $defs generated)
 templates/*.yaml                   authored bundle templates (enterprise uses includes:)
+scripts/build-schema.mjs           SObject describe → schema/$defs (field/picklist constraints)
+scripts/describe/*.describe.json   checked-in describe fixtures (offline build / CI)
+scripts/schema-smoke.mjs           draft-07 validation smoke test for the generated schema
 scripts/build-templates.mjs        YAML templates → Graph_Template__mdt CMDT records
 force-app/main/default/
   objects/Graph_Template__mdt/      CMDT type that stores compiled template JSON
@@ -54,6 +57,32 @@ the `Graph_Template__mdt` CMDT — Apex reads JSON, never YAML:
 ```sh
 node scripts/build-templates.mjs    # regenerates customMetadata/Graph_Template.*.md-meta.xml
 ```
+
+## Schema
+
+The base contract `schema/quote-graph.schema.json` validates the **resolved** graph
+(after alias/FK back-fill and reference resolution). Its per-object field and
+picklist `$defs` are generated from SObject describe — never hand-edit them:
+
+```sh
+node scripts/build-schema.mjs                     # offline, from scripts/describe/*.json
+node scripts/build-schema.mjs --target-org myOrg  # live describe; refreshes the fixtures
+node scripts/schema-smoke.mjs                      # draft-07 smoke test (needs `npm install`)
+```
+
+The object list is the schema's own `node.objectApiName` enum, so adding an object
+there and re-running is all it takes. Output is deterministic and idempotent for a
+given describe input (field/`required` keys are sorted; picklist `enum`s preserve
+the org's display order). Field/type/enum constraints apply on every op;
+create-required fields are demanded only on `op: create` (edits and deletes touch
+a subset). Apex runtime validation does **not** read this file — it validates
+against live describe — so the schema serves authoring/LLM tooling, not the engine.
+
+The checked-in `scripts/describe/*.describe.json` fixtures are a **curated subset**
+of fields so the build runs offline / in CI. Because the generated defs use
+`additionalProperties: false`, the offline schema only accepts the fixtured fields;
+run `--target-org <alias>` to regenerate from a full describe (and refresh the
+fixtures) before relying on the schema to validate arbitrary real-org fields.
 
 `opportunity-bundle` is the runnable bundle (Opportunity + two priced lines).
 `starter-bundle` / `enterprise-bundle` are the Quote examples; `enterprise-bundle`

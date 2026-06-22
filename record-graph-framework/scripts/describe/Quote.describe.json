@@ -1,0 +1,33 @@
+{
+  "status": 0,
+  "result": {
+    "name": "Quote",
+    "fields": [
+      { "name": "Name", "label": "Quote Name", "type": "string", "length": 80, "createable": true, "updateable": true, "nillable": false, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "QuoteNumber", "label": "Quote Number", "type": "string", "length": 240, "createable": false, "updateable": false, "nillable": false, "defaultedOnCreate": true, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "OpportunityId", "label": "Opportunity ID", "type": "reference", "length": 18, "createable": true, "updateable": false, "nillable": false, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false, "referenceTo": ["Opportunity"] },
+      { "name": "Pricebook2Id", "label": "Price Book ID", "type": "reference", "length": 18, "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false, "referenceTo": ["Pricebook2"] },
+      { "name": "ContactId", "label": "Contact ID", "type": "reference", "length": 18, "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false, "referenceTo": ["Contact"] },
+      { "name": "Status", "label": "Quote Status", "type": "picklist", "length": 40, "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": true, "calculated": false, "deprecatedAndHidden": false, "picklistValues": [
+        { "value": "Draft", "active": true, "defaultValue": true },
+        { "value": "Needs Review", "active": true, "defaultValue": false },
+        { "value": "In Review", "active": true, "defaultValue": false },
+        { "value": "Approved", "active": true, "defaultValue": false },
+        { "value": "Rejected", "active": true, "defaultValue": false },
+        { "value": "Presented", "active": true, "defaultValue": false },
+        { "value": "Accepted", "active": true, "defaultValue": false },
+        { "value": "Denied", "active": true, "defaultValue": false },
+        { "value": "Retired", "active": false, "defaultValue": false }
+      ] },
+      { "name": "ExpirationDate", "label": "Expiration Date", "type": "date", "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "Description", "label": "Description", "type": "textarea", "length": 32000, "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "Email", "label": "Email", "type": "email", "length": 121, "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "Phone", "label": "Phone", "type": "phone", "length": 40, "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "Tax", "label": "Tax", "type": "currency", "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "ShippingHandling", "label": "Shipping and Handling", "type": "currency", "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "GrandTotal", "label": "Grand Total", "type": "currency", "createable": false, "updateable": false, "nillable": true, "defaultedOnCreate": false, "calculated": true, "deprecatedAndHidden": false },
+      { "name": "BillingName", "label": "Billing Name", "type": "string", "length": 121, "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "BillingAddress", "label": "Billing Address", "type": "address", "createable": false, "updateable": false, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false }
+    ]
+  }
+}

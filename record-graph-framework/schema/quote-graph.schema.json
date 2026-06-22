@@ -4,7 +4,9 @@
   "title": "Record Graph",
   "description": "Base contract for a graph of related Salesforce records. This file is the canonical shape; the per-object field/picklist constraints under $defs are GENERATED from SObject describe (see DESIGN.md build steps) and should not be hand-edited.",
   "type": "object",
-  "required": ["nodes"],
+  "required": [
+    "nodes"
+  ],
   "additionalProperties": false,
   "properties": {
     "clientRequestId": {
@@ -22,17 +24,29 @@
     "nodes": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/node" }
+      "items": {
+        "$ref": "#/$defs/node"
+      }
     }
   },
   "$defs": {
     "op": {
       "type": "string",
-      "enum": ["create", "update", "delete", "upsert"]
+      "enum": [
+        "create",
+        "update",
+        "delete",
+        "upsert"
+      ]
     },
     "node": {
       "type": "object",
-      "required": ["alias", "objectApiName", "op", "fields"],
+      "required": [
+        "alias",
+        "objectApiName",
+        "op",
+        "fields"
+      ],
       "additionalProperties": false,
       "properties": {
         "alias": {
@@ -43,9 +57,16 @@
         "objectApiName": {
           "type": "string",
           "description": "SObject API name, e.g. Quote, QuoteLineItem.",
-          "enum": ["Quote", "QuoteLineItem", "Opportunity", "OpportunityLineItem"]
+          "enum": [
+            "Quote",
+            "QuoteLineItem",
+            "Opportunity",
+            "OpportunityLineItem"
+          ]
         },
-        "op": { "$ref": "#/$defs/op" },
+        "op": {
+          "$ref": "#/$defs/op"
+        },
         "id": {
           "type": "string",
           "description": "Salesforce record Id — required for update/delete, optional for upsert."
@@ -66,42 +87,415 @@
       },
       "allOf": [
         {
-          "if": { "properties": { "op": { "enum": ["update", "delete"] } } },
-          "then": { "required": ["id"] }
+          "if": {
+            "properties": {
+              "op": {
+                "enum": [
+                  "update",
+                  "delete"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "id"
+            ]
+          }
         },
         {
-          "if": { "properties": { "parentAlias": { "type": "string" } } },
-          "then": { "required": ["parentField"] }
+          "if": {
+            "required": [
+              "parentAlias"
+            ],
+            "properties": {
+              "parentAlias": {
+                "type": "string"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "parentField"
+            ]
+          }
+        },
+        {
+          "$comment": "generated:objectApiName-fields",
+          "if": {
+            "properties": {
+              "objectApiName": {
+                "const": "Quote"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "fields": {
+                "$ref": "#/$defs/quoteFields"
+              }
+            }
+          }
+        },
+        {
+          "$comment": "generated:objectApiName-fields",
+          "if": {
+            "properties": {
+              "objectApiName": {
+                "const": "Quote"
+              },
+              "op": {
+                "const": "create"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "fields": {
+                "required": [
+                  "Name"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "$comment": "generated:objectApiName-fields",
+          "if": {
+            "properties": {
+              "objectApiName": {
+                "const": "QuoteLineItem"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "fields": {
+                "$ref": "#/$defs/quoteLineItemFields"
+              }
+            }
+          }
+        },
+        {
+          "$comment": "generated:objectApiName-fields",
+          "if": {
+            "properties": {
+              "objectApiName": {
+                "const": "QuoteLineItem"
+              },
+              "op": {
+                "const": "create"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "fields": {
+                "required": [
+                  "Quantity"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "$comment": "generated:objectApiName-fields",
+          "if": {
+            "properties": {
+              "objectApiName": {
+                "const": "Opportunity"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "fields": {
+                "$ref": "#/$defs/opportunityFields"
+              }
+            }
+          }
+        },
+        {
+          "$comment": "generated:objectApiName-fields",
+          "if": {
+            "properties": {
+              "objectApiName": {
+                "const": "Opportunity"
+              },
+              "op": {
+                "const": "create"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "fields": {
+                "required": [
+                  "CloseDate",
+                  "Name",
+                  "StageName"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "$comment": "generated:objectApiName-fields",
+          "if": {
+            "properties": {
+              "objectApiName": {
+                "const": "OpportunityLineItem"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "fields": {
+                "$ref": "#/$defs/opportunityLineItemFields"
+              }
+            }
+          }
+        },
+        {
+          "$comment": "generated:objectApiName-fields",
+          "if": {
+            "properties": {
+              "objectApiName": {
+                "const": "OpportunityLineItem"
+              },
+              "op": {
+                "const": "create"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "fields": {
+                "required": [
+                  "Quantity"
+                ]
+              }
+            }
+          }
         }
       ]
     },
-
-    "_comment_generated": "Everything below is illustrative of what the describe generator emits. Replace at build time.",
-
+    "opportunityFields": {
+      "type": "object",
+      "description": "GENERATED by scripts/build-schema.mjs from SObject describe — do not hand-edit. Run `node scripts/build-schema.mjs` to refresh. Source: describe('Opportunity').",
+      "additionalProperties": false,
+      "properties": {
+        "AccountId": {
+          "type": "string",
+          "maxLength": 18
+        },
+        "Amount": {
+          "type": "number"
+        },
+        "CloseDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "Description": {
+          "type": "string",
+          "maxLength": 32000
+        },
+        "ForecastCategoryName": {
+          "type": "string",
+          "enum": [
+            "Omitted",
+            "Pipeline",
+            "Best Case",
+            "Commit",
+            "Closed"
+          ]
+        },
+        "IsPrivate": {
+          "type": "boolean"
+        },
+        "LeadSource": {
+          "type": "string",
+          "enum": [
+            "Web",
+            "Phone Inquiry",
+            "Partner Referral",
+            "Purchased List",
+            "Other"
+          ]
+        },
+        "Name": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "NextStep": {
+          "type": "string",
+          "maxLength": 255
+        },
+        "Pricebook2Id": {
+          "type": "string",
+          "maxLength": 18
+        },
+        "Probability": {
+          "type": "number"
+        },
+        "StageName": {
+          "type": "string",
+          "enum": [
+            "Prospecting",
+            "Qualification",
+            "Needs Analysis",
+            "Value Proposition",
+            "Id. Decision Makers",
+            "Proposal/Price Quote",
+            "Negotiation/Review",
+            "Closed Won",
+            "Closed Lost"
+          ]
+        },
+        "Type": {
+          "type": "string",
+          "enum": [
+            "Existing Customer - Upgrade",
+            "Existing Customer - Replacement",
+            "Existing Customer - Downgrade",
+            "New Customer"
+          ]
+        }
+      }
+    },
+    "opportunityLineItemFields": {
+      "type": "object",
+      "description": "GENERATED by scripts/build-schema.mjs from SObject describe — do not hand-edit. Run `node scripts/build-schema.mjs` to refresh. Source: describe('OpportunityLineItem').",
+      "additionalProperties": false,
+      "properties": {
+        "Description": {
+          "type": "string",
+          "maxLength": 255
+        },
+        "Discount": {
+          "type": "number"
+        },
+        "OpportunityId": {
+          "type": "string",
+          "maxLength": 18
+        },
+        "PricebookEntryId": {
+          "type": "string",
+          "maxLength": 18
+        },
+        "Quantity": {
+          "type": "number"
+        },
+        "ServiceDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "TotalPrice": {
+          "type": "number"
+        },
+        "UnitPrice": {
+          "type": "number"
+        }
+      }
+    },
     "quoteFields": {
       "type": "object",
-      "description": "GENERATED from describe('Quote'). Picklist enums reflect live org values.",
+      "description": "GENERATED by scripts/build-schema.mjs from SObject describe — do not hand-edit. Run `node scripts/build-schema.mjs` to refresh. Source: describe('Quote').",
+      "additionalProperties": false,
       "properties": {
-        "Name": { "type": "string", "maxLength": 80 },
-        "OpportunityId": { "type": "string" },
-        "Status": { "type": "string", "enum": ["Draft", "Needs Review", "In Review", "Approved", "Rejected", "Presented", "Accepted", "Denied"] },
-        "ExpirationDate": { "type": "string", "format": "date" },
-        "Pricebook2Id": { "type": "string" }
-      },
-      "required": ["Name"]
+        "BillingName": {
+          "type": "string",
+          "maxLength": 121
+        },
+        "ContactId": {
+          "type": "string",
+          "maxLength": 18
+        },
+        "Description": {
+          "type": "string",
+          "maxLength": 32000
+        },
+        "Email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 121
+        },
+        "ExpirationDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "Name": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "OpportunityId": {
+          "type": "string",
+          "maxLength": 18
+        },
+        "Phone": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "Pricebook2Id": {
+          "type": "string",
+          "maxLength": 18
+        },
+        "ShippingHandling": {
+          "type": "number"
+        },
+        "Status": {
+          "type": "string",
+          "enum": [
+            "Draft",
+            "Needs Review",
+            "In Review",
+            "Approved",
+            "Rejected",
+            "Presented",
+            "Accepted",
+            "Denied"
+          ]
+        },
+        "Tax": {
+          "type": "number"
+        }
+      }
     },
     "quoteLineItemFields": {
       "type": "object",
-      "description": "GENERATED from describe('QuoteLineItem').",
+      "description": "GENERATED by scripts/build-schema.mjs from SObject describe — do not hand-edit. Run `node scripts/build-schema.mjs` to refresh. Source: describe('QuoteLineItem').",
+      "additionalProperties": false,
       "properties": {
-        "QuoteId": { "type": "string" },
-        "PricebookEntryId": { "type": "string" },
-        "Product2Id": { "type": "string" },
-        "Quantity": { "type": "number", "exclusiveMinimum": 0 },
-        "UnitPrice": { "type": "number", "minimum": 0 },
-        "Discount": { "type": "number", "minimum": 0, "maximum": 100 }
-      },
-      "required": ["Quantity"]
+        "Description": {
+          "type": "string",
+          "maxLength": 255
+        },
+        "Discount": {
+          "type": "number"
+        },
+        "PricebookEntryId": {
+          "type": "string",
+          "maxLength": 18
+        },
+        "Quantity": {
+          "type": "number"
+        },
+        "QuoteId": {
+          "type": "string",
+          "maxLength": 18
+        },
+        "ServiceDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "TotalPrice": {
+          "type": "number"
+        },
+        "UnitPrice": {
+          "type": "number"
+        }
+      }
     }
-  }
+  },
+  "$comment": "GENERATED by scripts/build-schema.mjs from SObject describe — do not hand-edit. Run `node scripts/build-schema.mjs` to refresh."
 }

@@ -1,0 +1,49 @@
+{
+  "status": 0,
+  "result": {
+    "name": "Opportunity",
+    "fields": [
+      { "name": "Name", "label": "Opportunity Name", "type": "string", "length": 120, "createable": true, "updateable": true, "nillable": false, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "StageName", "label": "Stage", "type": "picklist", "length": 40, "createable": true, "updateable": true, "nillable": false, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false, "picklistValues": [
+        { "value": "Prospecting", "active": true, "defaultValue": false },
+        { "value": "Qualification", "active": true, "defaultValue": false },
+        { "value": "Needs Analysis", "active": true, "defaultValue": false },
+        { "value": "Value Proposition", "active": true, "defaultValue": false },
+        { "value": "Id. Decision Makers", "active": true, "defaultValue": false },
+        { "value": "Proposal/Price Quote", "active": true, "defaultValue": false },
+        { "value": "Negotiation/Review", "active": true, "defaultValue": false },
+        { "value": "Closed Won", "active": true, "defaultValue": false },
+        { "value": "Closed Lost", "active": true, "defaultValue": false }
+      ] },
+      { "name": "CloseDate", "label": "Close Date", "type": "date", "createable": true, "updateable": true, "nillable": false, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "Amount", "label": "Amount", "type": "currency", "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "Probability", "label": "Probability (%)", "type": "percent", "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": true, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "AccountId", "label": "Account ID", "type": "reference", "length": 18, "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false, "referenceTo": ["Account"] },
+      { "name": "Pricebook2Id", "label": "Price Book ID", "type": "reference", "length": 18, "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false, "referenceTo": ["Pricebook2"] },
+      { "name": "Type", "label": "Opportunity Type", "type": "picklist", "length": 40, "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false, "picklistValues": [
+        { "value": "Existing Customer - Upgrade", "active": true, "defaultValue": false },
+        { "value": "Existing Customer - Replacement", "active": true, "defaultValue": false },
+        { "value": "Existing Customer - Downgrade", "active": true, "defaultValue": false },
+        { "value": "New Customer", "active": true, "defaultValue": false }
+      ] },
+      { "name": "LeadSource", "label": "Lead Source", "type": "picklist", "length": 40, "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false, "picklistValues": [
+        { "value": "Web", "active": true, "defaultValue": false },
+        { "value": "Phone Inquiry", "active": true, "defaultValue": false },
+        { "value": "Partner Referral", "active": true, "defaultValue": false },
+        { "value": "Purchased List", "active": true, "defaultValue": false },
+        { "value": "Other", "active": true, "defaultValue": false }
+      ] },
+      { "name": "NextStep", "label": "Next Step", "type": "string", "length": 255, "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "Description", "label": "Description", "type": "textarea", "length": 32000, "createable": true, "updateable": true, "nillable": true, "defaultedOnCreate": false, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "IsPrivate", "label": "Private", "type": "boolean", "createable": true, "updateable": true, "nillable": false, "defaultedOnCreate": true, "calculated": false, "deprecatedAndHidden": false },
+      { "name": "ForecastCategoryName", "label": "Forecast Category", "type": "picklist", "length": 40, "createable": false, "updateable": true, "nillable": true, "defaultedOnCreate": true, "calculated": false, "deprecatedAndHidden": false, "picklistValues": [
+        { "value": "Omitted", "active": true, "defaultValue": false },
+        { "value": "Pipeline", "active": true, "defaultValue": false },
+        { "value": "Best Case", "active": true, "defaultValue": false },
+        { "value": "Commit", "active": true, "defaultValue": false },
+        { "value": "Closed", "active": true, "defaultValue": false }
+      ] },
+      { "name": "ExpectedRevenue", "label": "Expected Revenue", "type": "currency", "createable": false, "updateable": false, "nillable": true, "defaultedOnCreate": false, "calculated": true, "deprecatedAndHidden": false }
+    ]
+  }
+}
