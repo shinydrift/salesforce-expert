@@ -131,6 +131,21 @@ constraints apply on every op, but create-required fields are demanded only on
 `delete`, none). Reference/FK fields are also omitted from `required` because the
 engine fills them. The raw YAML
 templates are the *pre-resolution* authoring surface (placeholders, the synthetic
-`ProductCode`, omitted FKs), so they are a looser surface than this schema — a
-dedicated, template-derived generation schema for in-IDE template authoring is a
-sensible follow-up.
+`ProductCode`, omitted FKs), so they are a looser surface than this schema.
+
+## Generation schema (the tiny tier the LLM targets)
+
+The third tier from the table above is now generated too. `scripts/build-generation-schema.mjs`
+reads each `templates/*.yaml` and emits one JSON Schema per template under
+`schema/generation/<id>.schema.json`. Each validates the generation payload the
+agent actually produces — `{ templateId, parameters }` — where `templateId` is a
+`const` (the template's `id`) and `parameters` is `additionalProperties:false`
+with one typed slot per declared parameter (`string`/`number` → JSON-Schema type),
+`required` for the required slots, and the template's `default` carried through.
+The template is the single source of truth, so this surface can't drift from it,
+and `generation surface ⊂ template ⊂ base schema` holds: the agent fills a handful
+of typed slots, `TemplateExpander` expands those into the full graph, and the
+describe-derived base schema is the safety net that validates the *resolved*
+result before DML. Covered by a draft-07 smoke test
+(`scripts/generation-schema-smoke.mjs`): rejects wrong `templateId`, missing
+required slot, unknown slot, and wrong slot type.

@@ -14,10 +14,13 @@ covered by tests.
 
 ```
 schema/quote-graph.schema.json     base graph contract (JSON Schema; $defs generated)
+schema/generation/<id>.schema.json per-template generation surface ({templateId,parameters})
 templates/*.yaml                   authored bundle templates (enterprise uses includes:)
 scripts/build-schema.mjs           SObject describe → schema/$defs (field/picklist constraints)
+scripts/build-generation-schema.mjs  YAML templates → schema/generation/<id>.schema.json
 scripts/describe/*.describe.json   checked-in describe fixtures (offline build / CI)
 scripts/schema-smoke.mjs           draft-07 validation smoke test for the generated schema
+scripts/generation-schema-smoke.mjs  draft-07 smoke test for the generation schemas
 scripts/build-templates.mjs        YAML templates → Graph_Template__mdt CMDT records
 force-app/main/default/
   objects/Graph_Template__mdt/      CMDT type that stores compiled template JSON
@@ -87,6 +90,23 @@ fixtures) before relying on the schema to validate arbitrary real-org fields.
 `opportunity-bundle` is the runnable bundle (Opportunity + two priced lines).
 `starter-bundle` / `enterprise-bundle` are the Quote examples; `enterprise-bundle`
 demonstrates multi-level composition via `includes:`.
+
+### Generation schema (the tiny tier the LLM targets)
+
+The base schema validates the wide, **resolved** graph; the agent never builds
+that. It picks a `templateId` and fills a handful of typed slots. Those slots are
+the generation surface, derived per template from the YAML — one schema per
+template, validating `{ templateId, parameters }`:
+
+```sh
+node scripts/build-generation-schema.mjs   # templates/*.yaml → schema/generation/<id>.schema.json
+node scripts/generation-schema-smoke.mjs   # draft-07 smoke test (needs `npm install`)
+```
+
+`templateId` is a `const`, `parameters` is `additionalProperties:false` with one
+typed slot per declared template parameter (`required` enforced, `default` carried
+through). The template is the single source of truth, so the surface can't drift
+from it, and `generation surface ⊂ template ⊂ base schema` holds.
 
 ## Deploy + test
 

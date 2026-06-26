@@ -5,7 +5,9 @@
   "scripts": {
     "build:templates": "node scripts/build-templates.mjs",
     "build:schema": "node scripts/build-schema.mjs",
-    "test:schema": "node scripts/schema-smoke.mjs"
+    "build:generation": "node scripts/build-generation-schema.mjs",
+    "test:schema": "node scripts/schema-smoke.mjs",
+    "test:generation": "node scripts/generation-schema-smoke.mjs"
   },
   "dependencies": {
     "js-yaml": "^4.2.0"
