@@ -140,8 +140,14 @@ reads each `templates/*.yaml` and emits one JSON Schema per template under
 `schema/generation/<id>.schema.json`. Each validates the generation payload the
 agent actually produces — `{ templateId, parameters }` — where `templateId` is a
 `const` (the template's `id`) and `parameters` is `additionalProperties:false`
-with one typed slot per declared parameter (`string`/`number` → JSON-Schema type),
-`required` for the required slots, and the template's `default` carried through.
+with one typed slot per declared parameter, `required` for the required slots, and
+the template's `default` carried through (on optional slots only). Slot types map
+`string`/`number`/`integer`/`boolean` directly and `date`/`datetime`/`email`/`uri`
+to a `string` with the matching `format`, so a template can tighten a slot (e.g.
+`opportunity-bundle`'s `closeDate` is `type: date`) and the generation surface is
+no looser than the resolved-graph base schema for that field. The generator is
+atomic and prunes orphaned output — a malformed template aborts the run with
+nothing written, and a deleted/renamed template leaves no stale schema behind.
 The template is the single source of truth, so this surface can't drift from it,
 and `generation surface ⊂ template ⊂ base schema` holds: the agent fills a handful
 of typed slots, `TemplateExpander` expands those into the full graph, and the

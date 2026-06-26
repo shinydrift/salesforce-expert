@@ -19,7 +19,8 @@
       "additionalProperties": false,
       "properties": {
         "closeDate": {
-          "type": "string"
+          "type": "string",
+          "format": "date"
         },
         "name": {
           "type": "string"
