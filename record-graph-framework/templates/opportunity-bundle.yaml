@@ -15,7 +15,7 @@ parameters:
     type: string
     required: true
   - name: closeDate
-    type: string
+    type: date
     required: true
   - name: quantity
     type: number
