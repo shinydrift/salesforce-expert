@@ -1,0 +1,8 @@
+# Salesforce CLI local state
+.sf/
+.sfdx/
+.localdevserver/
+
+# Logs / OS
+*.log
+.DS_Store
