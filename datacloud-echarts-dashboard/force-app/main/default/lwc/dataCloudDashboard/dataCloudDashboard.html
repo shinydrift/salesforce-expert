@@ -1,0 +1,40 @@
+<template>
+    <lightning-card title="Data Cloud Dashboard" icon-name="standard:dashboard">
+        <lightning-button
+            slot="actions"
+            label="Refresh"
+            icon-name="utility:refresh"
+            onclick={handleRefresh}
+        ></lightning-button>
+
+        <div class="slds-p-horizontal_small slds-p-bottom_small">
+            <template lwc:if={loading}>
+                <div class="slds-align_absolute-center slds-p-vertical_large">
+                    <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
+                </div>
+            </template>
+
+            <template lwc:if={tiles.length}>
+                <div class="slds-grid slds-wrap slds-gutters">
+                    <template for:each={tiles} for:item="tile">
+                        <div key={tile.id} class={tile.sizeClass} style="margin-bottom:1rem;">
+                            <article class="slds-card slds-card_boundary slds-p-around_small">
+                                <h3 class="slds-text-heading_small slds-p-bottom_x-small">
+                                    {tile.title}
+                                </h3>
+                                <template lwc:if={tile.error}>
+                                    <div class="slds-text-color_error slds-p-around_small">
+                                        {tile.error}
+                                    </div>
+                                </template>
+                                <template lwc:else>
+                                    <c-echart option={tile.option}></c-echart>
+                                </template>
+                            </article>
+                        </div>
+                    </template>
+                </div>
+            </template>
+        </div>
+    </lightning-card>
+</template>
